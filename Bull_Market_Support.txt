@@ -1,0 +1,39 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © krosenfeld7
+
+//@version=4
+study("Bull Market Support Band", overlay = true)
+
+resolution = input(title="Higher Timeframe Period", type=input.resolution, defval="D")
+
+len1 = input(title="EMA Length", type=input.integer, defval=147, minval=1)
+src1 = input(title="EMA Source", type=input.source,  defval=close)
+len2 = input(title="SMA Length", type=input.integer, defval=140, minval=1)
+src2 = input(title="SMA Source", type=input.source,  defval=close)
+
+ema21 = ema(src1, len1)
+sma20 = sma(src2, len2)
+
+ema21daily = security(syminfo.tickerid, resolution, ema21[barstate.isrealtime ? 1 : 0], barmerge.gaps_off, barmerge.lookahead_off)
+sma20daily = security(syminfo.tickerid, resolution, sma20[barstate.isrealtime ? 1 : 0], barmerge.gaps_off, barmerge.lookahead_off)
+
+emaColor   = color.new(color.green, transp = 0)
+smaColor   = color.new(color.red,   transp = 0)
+diffColor  = ema21daily > sma20daily ? color.new(color.green, transp = 75) : color.new(color.red, transp = 75)
+
+pEma = plot(ema21daily, title = "EMA", color = emaColor, linewidth = 2)
+pSma = plot(sma20daily, title = "SMA", color = smaColor, linewidth = 2)
+
+fill(pEma, pSma, color = diffColor)
+
+var line1 = line.new(0,0,0,0)
+line.set_x1(line1, bar_index)
+line.set_x2(line1, bar_index)
+line.set_y1(line1, ema21daily)
+line.set_y2(line1, sma20daily)
+line.set_style(line1, line.style_dotted)
+line.set_width(line1, 3)
+line.set_color(line1, ema21daily > sma20daily ? color.green : color.red)
+
+if barstate.isrealtime
+    label.new(bar_index - 5, (ema21daily + sma20daily) / 2, color = color.new(color.white, transp = 100), text = tostring(ema21daily - sma20daily, "#.##"), style = label.style_label_center, textcolor = color.white, size = size.large)

@@ -1,0 +1,68 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © krosenfeld7
+
+//@version=4
+study("Moving Average Extension", overlay = true)
+
+resolution = input(title = "Moving Average Resolution", 
+     type  = input.resolution, defval = "D")
+length     = input(title = "Moving Average Length",
+     type  = input.integer, defval = 140, minval = 1)
+source     = input(title = "Moving Average Source",
+     type  = input.source, defval = close)
+maType     = input(title = "Moving Average Type", 
+     type  = input.string, defval = "SMA", options = 
+     ["EMA", "HMA", "SMA", "VWMA", "WMA"])
+
+ema  = ema(source,  length)
+hma  = hma(source,  length)
+vwma = vwma(source, length)
+wma  = wma(source,  length)
+sma  = sma(source,  length)
+
+emaRes = security(syminfo.tickerid, resolution, 
+ ema[barstate.isrealtime ? 1 : 0], barmerge.gaps_off, 
+ barmerge.lookahead_off)
+hmaRes = security(syminfo.tickerid, resolution, 
+ hma[barstate.isrealtime ? 1 : 0], barmerge.gaps_off, 
+ barmerge.lookahead_off)
+vwmaRes = security(syminfo.tickerid, resolution, 
+ vwma[barstate.isrealtime ? 1 : 0], barmerge.gaps_off, 
+ barmerge.lookahead_off)
+wmaRes = security(syminfo.tickerid, resolution, 
+ wma[barstate.isrealtime ? 1 : 0], barmerge.gaps_off, 
+ barmerge.lookahead_off)
+smaRes = security(syminfo.tickerid, resolution, 
+ sma[barstate.isrealtime ? 1 : 0], barmerge.gaps_off, 
+ barmerge.lookahead_off)
+
+movingAvgRes = smaRes
+
+if maType == "EMA"
+    movingAvgRes := emaRes
+else if maType == "HMA"
+    movingAvgRes := hmaRes
+else if maType == "VWMA"
+    movingAvgRes := vwmaRes
+else if maType == "WMA"
+    movingAvgRes := wmaRes
+
+value = log(source / movingAvgRes)
+
+closePlot = plot(close, color = color.new(color.white, transp = 100))
+
+mAvgPlot = plot(movingAvgRes, color = color.new(value < 0 ? color.red : 
+     color.green, transp = 0), linewidth = 3)
+plot(value, color = color.new(value < 0 ? color.red : 
+     color.green, transp = 100))
+fill(mAvgPlot, closePlot, color = color.new(value < 0 ? color.red : 
+     color.green, transp = 75))
+
+var line1 = line.new(0,0,0,0)
+line.set_x1(line1, bar_index)
+line.set_x2(line1, bar_index)
+line.set_y1(line1, movingAvgRes)
+line.set_y2(line1, close)
+line.set_style(line1, line.style_dotted)
+line.set_width(line1, 3)
+line.set_color(line1, color.white)

@@ -1,0 +1,266 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © krosenfeld7
+
+//@version=4 
+study(title="Directional Movement Index Divergence+", shorttitle="DMI Divergence+", overlay = true, format=format.price, precision=4)
+
+barsback         = input(title = "Price Lookback",      type = input.integer, defval = 15, minval = 1)
+lookback         = input(title = "ADX Lookback",        type = input.integer, defval = 15,  minval = 1)
+shortRangeString = input(title = "Divergence Range",    type = input.string,  defval = "Short", options = ["Short", "Med", "Long"])
+priceTolerance   = input(title = "Price Epsilon (%)",   type = input.float,   defval = 1.0, minval = 0.0)
+adxTolerance     = input(title = "ADX Epsilon (%)",     type = input.float,   defval = 1.0, minval = 0.0)
+
+lensig = input(14, title="ADX Smoothing", minval=1, maxval=50)
+len = input(14, minval=1, title="DI Length")
+up = change(high)
+down = -change(low)
+plusDM = na(up) ? na : (up > down and up > 0 ? up : 0)
+minusDM = na(down) ? na : (down > up and down > 0 ? down : 0)
+trur = rma(tr, len)
+plus = fixnan(100 * rma(plusDM, len) / trur)
+minus = fixnan(100 * rma(minusDM, len) / trur)
+sum = plus + minus
+adx = 100 * rma(abs(plus - minus) / (sum == 0 ? 1 : sum), lensig)
+
+displayHighLows = input(title = "Display High/Low Pivots", type=input.bool, defval = false)
+overlayMode     = input(title = "Overlay Price Chart", type = input.bool, defval = true)
+
+overlayModeOrange = color.new(color.orange, transp = not overlayMode ? 0  : 100)
+
+plot(adx, color=overlayModeOrange, title="ADX", linewidth = 3)
+
+band0   = hline(0,  "Bottom",           color = (not overlayMode ? color.white : na), linewidth = 1, linestyle = hline.style_dashed)
+band25  = hline(25, "Weak",             color = (not overlayMode ? color.white : na), linewidth = 1, linestyle = hline.style_dashed)
+band50  = hline(50, "Strong",           color = (not overlayMode ? color.white : na), linewidth = 1, linestyle = hline.style_dashed)
+band75  = hline(75, "Very Strong",      color = (not overlayMode ? color.white : na), linewidth = 1, linestyle = hline.style_dashed)
+band100 = hline(100,"Extremely Strong", color = (not overlayMode ? color.white : na), linewidth = 1, linestyle = hline.style_dashed)
+
+fill(band0,  band25,  color = color.new(color.white,   transp = not overlayMode ? 85 : 100), title = "Background")
+fill(band25, band50,  color = color.new(color.yellow,  transp = not overlayMode ? 75 : 100), title = "Background")
+fill(band50, band75,  color = color.new(color.orange,  transp = not overlayMode ? 75 : 100), title = "Background")
+fill(band75, band100, color = color.new(color.red,     transp = not overlayMode ? 75 : 100), title = "Background")
+
+shortRange = 1
+if shortRangeString == "Med"
+    shortRange := 2
+else if shortRangeString == "Long"
+    shortRange := 3
+
+var bool priceHighSet = na
+var bool priceLowSet  = na
+var bool adxHighSet   = na
+var bool adxLowSet    = na
+
+currHigh = pivothigh(adx, lookback, lookback)
+currLow  = pivotlow(adx,  lookback, lookback)
+
+lastHighShort = valuewhen(not na(currHigh), currHigh, shortRange)
+lastLowShort  = valuewhen(not na(currLow),  currLow,  shortRange)
+
+lowerHighShort  = not na(currHigh) ? lastHighShort > (currHigh * (1 + (adxTolerance / 100))) : false
+higherHighShort = not na(currHigh) ? lastHighShort < (currHigh * (1 - (adxTolerance / 100))) : false
+lowerLowShort   = not na(currLow)  ? lastLowShort  > (currLow *  (1 + (adxTolerance / 100))) : false
+higherLowShort  = not na(currLow)  ? lastLowShort  < (currLow *  (1 - (adxTolerance / 100))) : false
+
+currPriceHigh = pivothigh(high, barsback, barsback)
+currPriceLow  = pivotlow(low,   barsback, barsback)
+
+lastPriceHighShort = valuewhen(not na(currPriceHigh), currPriceHigh, shortRange)
+lastPriceLowShort  = valuewhen(not na(currPriceLow),  currPriceLow, shortRange)
+
+lowerPriceHighShort  = not na(currPriceHigh) ? lastPriceHighShort > (currPriceHigh * (1 + (priceTolerance / 100))) : false
+higherPriceHighShort = not na(currPriceHigh) ? lastPriceHighShort < (currPriceHigh * (1 - (priceTolerance / 100))) : false
+lowerPriceLowShort   = not na(currPriceLow)  ? lastPriceLowShort  > (currPriceLow *  (1 + (priceTolerance / 100))) : false
+higherPriceLowShort  = not na(currPriceLow)  ? lastPriceLowShort  < (currPriceLow *  (1 - (priceTolerance / 100))) : false
+
+lowerLowRecent   = barssince(lowerLowShort)   < lookback
+lowerHighRecent  = barssince(lowerHighShort)  < lookback
+higherLowRecent  = barssince(higherLowShort)  < lookback
+higherHighRecent = barssince(higherHighShort) < lookback
+    
+lowerPriceLowRecent   = barssince(lowerPriceLowShort)   < barsback
+lowerPriceHighRecent  = barssince(lowerPriceHighShort)  < barsback
+higherPriceLowRecent  = barssince(higherPriceLowShort)  < barsback
+higherPriceHighRecent = barssince(higherPriceHighShort) < barsback
+
+regShortBullish = lowerPriceLowRecent and higherLowRecent
+hidShortBullish = higherPriceLowRecent and lowerLowRecent
+regShortBearish = higherPriceHighRecent and lowerHighRecent
+hidShortBearish = lowerPriceHighRecent and higherHighRecent
+
+priceHighIndex = barssince(not na(priceHighSet))
+priceLowIndex  = barssince(not na(priceLowSet))
+adxHighIndex   = barssince(not na(adxHighSet))
+adxLowIndex    = barssince(not na(adxLowSet))
+
+priceHighSet := not na(currPriceHigh) ? true : na
+priceLowSet  := not na(currPriceLow)  ? true : na
+adxHighSet   := not na(currHigh)      ? true : na
+adxLowSet    := not na(currLow)       ? true : na
+
+currPriceHigh := na(currPriceHigh) ? currPriceHigh[1] : currPriceHigh
+currPriceLow  := na(currPriceLow)  ? currPriceLow[1]  : currPriceLow
+currHigh      := na(currHigh)      ? currHigh[1]      : currHigh
+currLow       := na(currLow)       ? currLow[1]       : currLow
+
+newIndexLow = adxLowIndex
+newIndexLow2 = bar_index - lookback
+if adxLowIndex < lookback
+    for i = 0 to lookback
+        if adxLowIndex[i] == 0
+            newIndexLow := adxLowIndex[i + 1] + (i + 1)
+            newIndexLow2 -= i + 1
+            break
+            
+newIndexHigh = adxHighIndex
+newIndexHigh2 = bar_index - lookback
+if adxHighIndex < lookback
+    for i = 0 to lookback
+        if adxHighIndex[i] == 0
+            newIndexHigh := adxHighIndex[i + 1] + (i + 1)
+            newIndexHigh2 -= i + 1
+            break
+            
+newIndexPriceLow = priceLowIndex
+newIndexPriceLow2 = bar_index - barsback
+if priceLowIndex < barsback
+    for i = 0 to barsback
+        if priceLowIndex[i] == 0
+            newIndexPriceLow := priceLowIndex[i + 1] + (i + 1)
+            newIndexPriceLow2 -= i + 1 
+            break
+
+newIndexPriceHigh = priceHighIndex
+newIndexPriceHigh2 = bar_index - barsback
+if priceHighIndex < barsback
+    for i = 0 to barsback
+        if priceHighIndex[i] == 0
+            newIndexPriceHigh += priceHighIndex[i + 1] + 1
+            newIndexPriceHigh2 -= i + 1
+            break
+
+max_bars_back(adxLowIndex, 500)
+max_bars_back(adxHighIndex, 500)
+max_bars_back(priceLowIndex, 500)
+max_bars_back(priceHighIndex, 500)
+
+if shortRange <= 1
+    prevPivot = 0
+else
+    newIndexLow       += adxLowIndex[newIndexLow + 1] + 1
+    newIndexHigh      += adxHighIndex[newIndexHigh + 1] + 1
+    newIndexPriceLow  += priceLowIndex[newIndexPriceLow + 1] + 1
+    newIndexPriceHigh += priceHighIndex[newIndexPriceHigh + 1] + 1
+    
+if shortRange == 3
+    newIndexLow       += adxLowIndex[newIndexLow + 1] + 1
+    newIndexHigh      += adxHighIndex[newIndexHigh + 1] + 1
+    newIndexPriceLow  += priceLowIndex[newIndexPriceLow + 1] + 1
+    newIndexPriceHigh += priceHighIndex[newIndexPriceHigh + 1] + 1
+
+var line highPriceLine = na
+var line highAdxLine   = na
+var line lowPriceLine = na
+var line lowAdxLine    = na
+
+x_low            = bar_index - lookback - newIndexLow - 1
+x_low_mid        = bar_index - lookback - (newIndexLow / 2)
+x_high           = bar_index - lookback - newIndexHigh - 1
+x_high_mid       = bar_index - lookback - (newIndexHigh / 2)
+x_price_low      = bar_index - barsback - newIndexPriceLow - 1
+x_price_low_mid  = bar_index - barsback - (newIndexPriceLow / 2)
+x_price_high     = bar_index - barsback - newIndexPriceHigh - 1
+x_price_high_mid = bar_index - barsback - (newIndexPriceHigh / 2)
+
+if (regShortBearish and not regShortBearish[1]) or (hidShortBearish and not hidShortBearish[1])
+    if not overlayMode // ADX
+        highAdxLine := line.new(0, 0, 0, 0)
+        line.set_x1(highAdxLine, x_high)
+        line.set_y1(highAdxLine, lastHighShort)
+        line.set_x2(highAdxLine, newIndexHigh2)
+        line.set_y2(highAdxLine, currHigh)
+        line.set_style(highAdxLine, line.style_dotted)
+        line.set_width(highAdxLine, 2)
+        line.set_color(highAdxLine, color=regShortBearish ? color.red : color.yellow)
+    else
+        highPriceLine := line.new(0, 0, 0, 0)
+        line.set_x1(highPriceLine, x_price_high)
+        line.set_y1(highPriceLine, lastPriceHighShort)
+        line.set_x2(highPriceLine, newIndexPriceHigh2)
+        line.set_y2(highPriceLine, currPriceHigh)
+        line.set_style(highPriceLine, line.style_dotted)
+        line.set_width(highPriceLine, 3)
+        line.set_color(highPriceLine, color=regShortBearish ? color.red : color.yellow)
+
+if (regShortBullish and not regShortBullish[1]) or (hidShortBullish and not hidShortBullish[1])
+    if not overlayMode // Adx
+        lowAdxLine := line.new(0, 0, 0, 0)
+        line.set_x1(lowAdxLine, x_low)
+        line.set_y1(lowAdxLine, lastLowShort)
+        line.set_x2(lowAdxLine, newIndexLow2)
+        line.set_y2(lowAdxLine, currLow)
+        line.set_style(lowAdxLine, line.style_dotted)
+        line.set_width(lowAdxLine, 2)
+        line.set_color(lowAdxLine, color=regShortBullish ? color.green : color.blue)
+    else
+        lowPriceLine := line.new(0, 0, 0, 0)
+        line.set_x1(lowPriceLine, x_price_low)
+        line.set_y1(lowPriceLine, lastPriceLowShort)
+        line.set_x2(lowPriceLine, newIndexPriceLow2)
+        line.set_y2(lowPriceLine, currPriceLow)
+        line.set_style(lowPriceLine, line.style_dotted)
+        line.set_width(lowPriceLine, 3)
+        line.set_color(lowPriceLine, color=regShortBullish ? color.green : color.blue)
+
+if not overlayMode and displayHighLows// Adx
+    if lowerHighShort
+        label.new(bar_index - lookback, currHigh + 10, style=label.style_triangledown, color=color.new(color.yellow, transp=75), size=size.tiny)
+    if higherHighShort
+        label.new(bar_index - lookback, currHigh + 10, style=label.style_triangledown, color=color.new(color.green, transp=75), size=size.tiny)
+    if lowerLowShort
+        label.new(bar_index - lookback, currLow - 10, style=label.style_triangleup, color=color.new(color.red, transp=75), size=size.tiny)
+    if higherLowShort
+        label.new(bar_index - lookback, currLow - 10, style=label.style_triangleup, color=color.new(color.blue, transp=75), size=size.tiny)
+else if displayHighLows
+    if lowerPriceHighShort
+        label.new(bar_index - barsback, currPriceHigh * 1.05, style=label.style_triangledown, color=color.new(color.yellow, transp=75), size=size.tiny)
+    if higherPriceHighShort
+        label.new(bar_index - barsback, currPriceHigh * 1.05, style=label.style_triangledown, color=color.new(color.green, transp=75), size=size.tiny)
+    if lowerPriceLowShort
+        label.new(bar_index - barsback, currPriceLow * 0.95, style=label.style_triangleup, color=color.new(color.red, transp=75), size=size.tiny)
+    if higherPriceLowShort
+        label.new(bar_index - barsback, currPriceLow * 0.95, style=label.style_triangleup, color=color.new(color.blue, transp=75), size=size.tiny)
+
+labelColor1 = color.new(color.black, transp=25)
+// Short Regular Bullish Divergence - trend reversal
+// Price makes lower lows while Adx makes higher lows
+if regShortBullish and not regShortBullish[1]
+    if not overlayMode // Adx
+        label.new(x_low_mid, (currLow + lastLowShort) / 2, "Reg Bull Div", color=labelColor1, style=label.style_label_up, textcolor=color.green, size=size.small)
+    else
+        label.new(x_price_low_mid, (currPriceLow + lastPriceLowShort) / 2, "Reg ADX Bull Div", color=labelColor1, style=label.style_label_up, textcolor=color.green, size=size.normal)
+
+// Short Hidden Bullish Divergence - trend continuation
+// Price makes higher lows while Adx makes lower lows
+if hidShortBullish and not hidShortBullish[1]
+    if not overlayMode // Adx
+        label.new(x_low_mid, (currLow + lastLowShort) / 2, "Hid Bull Div", color=labelColor1, style=label.style_label_up, textcolor=color.blue, size=size.small)
+    else
+        label.new(x_price_low_mid, (currPriceLow + lastPriceLowShort) / 2, "Hid ADX Bull Div", color=labelColor1, style=label.style_label_up, textcolor=color.blue, size=size.normal)
+
+
+// Short Regular Bearish Divergence - trend reversal
+// Price makes higher highs while Adx makes lower highs
+if regShortBearish and not regShortBearish[1]
+    if not overlayMode // Adx
+        label.new(x_high_mid, (currHigh + lastHighShort) / 2, " Reg Bear Div", color=labelColor1, textcolor=color.red, size=size.small)
+    else
+        label.new(x_price_high_mid, (currPriceHigh + lastPriceHighShort) / 2, "Reg ADX Bear Div", color=labelColor1, textcolor=color.red, size=size.normal)
+        
+// Short Hidden Bearish Divergence - trend continuation
+// Price makes lower highs while Adx makes higher highs
+if hidShortBearish and not hidShortBearish[1]
+    if not overlayMode // Adx
+        label.new(x_high_mid, (currHigh + lastHighShort) / 2, "Hid Bear Div", color=labelColor1, textcolor=color.yellow, size=size.small)
+    else
+        label.new(x_price_high_mid, (currPriceHigh + lastPriceHighShort) / 2, "Hid ADX Bear Div", color=labelColor1, textcolor=color.yellow, size=size.normal)

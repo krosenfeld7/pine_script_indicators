@@ -1,0 +1,49 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © krosenfeld7
+
+// Red Triangle = Bearish
+// Blue Triangle = Bullish
+// White Cross = Death Cross
+// Yellow Cross = Golden Cross
+
+//@version=4
+study("EMA Crosses", shorttitle="EMA Crosses", overlay=true)
+
+resolution = input(title="Higher Timeframe Period", type=input.resolution, defval="D")
+len1 = input(title="Short EMA Length", type=input.integer, defval=20, minval=1)
+src1 = input(title="Short EMA Source", type=input.source, defval=close)
+len2 = input(title="Intermediate EMA Length", type=input.integer, defval=50, minval=1)
+src2 = input(title="Intermediate EMA Source", type=input.source, defval=close)
+len3 = input(title="Long EMA Length", type=input.integer, defval=200, minval=1)
+src3 = input(title="Long EMA Source", type=input.source, defval=close)
+
+ema20 = ema(src1, len1)
+ema50 = ema(src2, len2)
+ema200 = ema(src3, len3)
+ema20daily = security(syminfo.tickerid, resolution, ema20, barmerge.gaps_off, barmerge.lookahead_off)
+ema50daily = security(syminfo.tickerid, resolution, ema50, barmerge.gaps_off, barmerge.lookahead_off)
+ema200daily = security(syminfo.tickerid, resolution, ema200, barmerge.gaps_off, barmerge.lookahead_off)
+dailyTr = security(syminfo.tickerid, resolution, tr)
+
+bullish = (crossover(ema20daily, ema50daily) and ema50daily > ema200daily) or crossover(ema20daily, ema200daily) or crossover(ema50daily, ema200daily)
+bearish = (crossunder(ema20daily, ema50daily) and ema50daily < ema200daily) or crossunder(ema20daily, ema200daily) or crossunder(ema50daily, ema200daily)
+deathCross = crossunder(ema50daily, ema200daily) and resolution == "D"
+goldenCross = crossover(ema50daily, ema200daily) and resolution == "D"
+
+plot(ema20daily, color=color.new(color.green, transp=40), linewidth=2)
+plot(ema20, color=color.white, linewidth=2)
+plot(ema50daily, color=color.new(color.blue, transp=40), linewidth=2)
+plot(ema50, color=color.orange, linewidth=2)
+plot(ema200daily, color=color.new(color.purple, transp=40), linewidth=2)
+plot(ema200, color=color.red, linewidth=2)
+
+plotshape(bearish ? ema20daily[1] + dailyTr : na, style=shape.triangledown, title="Bearish", location=location.absolute, transp=0, color=color.red, size=size.small, offset=-1)
+plotshape(bullish ? ema20daily[1] - dailyTr : na, style=shape.triangleup, title="Bullish", location=location.absolute, transp=0, color=color.blue, size=size.small, offset=-1)
+plotshape(deathCross ? ema50daily[1] + dailyTr : na, style=shape.xcross, title="Death Cross", location=location.absolute, color=color.white, size=size.small, offset=-1)
+plotshape(goldenCross ? ema50daily[1] - dailyTr : na, style=shape.xcross, title="Golden Cross", location=location.absolute, color=color.yellow, size=size.small, offset=-1)
+
+// Alerts
+alertcondition(bullish ? 1 : 0, "Bullish EMAs", "Bullish EMA Trend")
+alertcondition(bearish ? 1 : 0, "Bearish EMAs", "Bearish EMA Trend")
+alertcondition(deathCross ? 1 : 0, "Death Cross", "Bearish EMA Trend (Death Cross)")
+alertcondition(goldenCross ? 1 : 0, "Golden Cross", "Bullish EMA Trend (Golden Cross)")

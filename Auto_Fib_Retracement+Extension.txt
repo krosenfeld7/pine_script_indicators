@@ -1,0 +1,490 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © krosenfeld7
+
+//@version=4
+study(title="Auto Fib Retracement + Extension", shorttitle="Auto Fib Tool", overlay=true, max_lines_count = 500, max_labels_count = 500)
+
+barsback = input(title = "Price Pivot Lookback", type = input.integer, defval = 10,  minval = 1)
+lookback = input(title = "RSI Pivot Lookback",   type = input.integer, defval = 15, minval = 1)
+numFibExt= input(title = "Num Fibs Back Extend", type = input.integer, defval = 1,  minval = 0)
+
+len1 = input(14, minval = 1, title = "RSI Length")
+src1 = input(close, "RSI Source", type = input.source)
+
+rsiOver      = 70
+rsiMid       = 50
+rsiUnder     = 30
+
+rsiMode     = input(title = "RSI Mode",           type = input.bool, defval = false)
+hideAll     = input(title = "Hide All Levels",    type = input.bool, defval = false)
+displayAll  = input(title = "Display All Levels", type = input.bool, defval = false)
+displayFibs = input(title = "Display Fib Values", type = input.bool, defval = true)
+displayDiag = input(title = "High/Low Diag Line", type = input.bool, defval = true)
+display1618 = input(title = "Fib 1.618 Level",    type = input.bool, defval = false)
+display1    = input(title = "Fib 1.00 Level",     type = input.bool, defval = true)
+display886  = input(title = "Fib .886 Level",     type = input.bool, defval = false)
+display786  = input(title = "Fib .786 Level",     type = input.bool, defval = false)
+display618  = input(title = "Fib .618 Level",     type = input.bool, defval = false)
+display50   = input(title = "Fib .500 Level",     type = input.bool, defval = false)
+display382  = input(title = "Fib .382 Level",     type = input.bool, defval = false)
+display236  = input(title = "Fib .236 Level",     type = input.bool, defval = false)
+display0    = input(title = "Fib .000 Level",     type = input.bool, defval = true)
+
+up   = rma(max(change(src1), 0), len1)
+down = rma(-min(change(src1), 0), len1)
+rsi  = ((down == 0) ? 100 : ((up == 0) ? 0 : (100 - (100 / (1 + up / down)))))
+
+whiteLight    = color.new(color.white,  transp = 95)
+whiteMed      = color.new(color.white,  transp = 85)
+whiteDark     = color.new(color.white,  transp = 75)
+rsiModeWhite  = color.new(color.white,  transp = 0)
+rsiModeBlue   = color.new(color.blue,   transp = 0)
+rsiModeOrange = color.new(color.orange, transp = 0)
+
+plot(rsi, "RSI", color=rsiMode ? rsiModeOrange : na, linewidth=2)
+
+band80 = hline(rsiOver + 10,  "Upper Band",  color = rsiMode ? rsiModeWhite : na, linewidth = 1, linestyle = hline.style_dashed)
+band50 = hline(rsiMid,        "Middle Band", color = rsiMode ? rsiModeBlue  : na, linewidth = 1, linestyle = hline.style_solid)
+band20 = hline(rsiUnder - 10, "Lower Band",  color = rsiMode ? rsiModeWhite : na, linewidth = 1, linestyle = hline.style_dashed)
+band70 = hline(rsiOver,       "Upper Band",  color = rsiMode ? rsiModeWhite : na, linewidth = 1, linestyle = hline.style_dashed)
+band30 = hline(rsiUnder,      "Lower Band",  color = rsiMode ? rsiModeWhite : na, linewidth = 1, linestyle = hline.style_dashed)
+fill(band50, band70, color = rsiMode ? whiteLight : na, title = "Background")
+fill(band30, band50, color = rsiMode ? whiteLight : na, title = "Background")
+fill(band70, band80, color = rsiMode ? whiteMed : na,   title = "Background")
+fill(band20, band30, color = rsiMode ? whiteMed : na,   title = "Background")
+
+fill(band80, hline(100, color = rsiMode ? rsiModeWhite : na, linestyle = hline.style_solid, linewidth = 2), color = rsiMode ? whiteDark : na, title = "Background")
+fill(hline(0, color = rsiMode ? rsiModeWhite : na, linestyle = hline.style_solid, linewidth = 2), band20, color = rsiMode ? whiteDark : na, title = "Background")
+
+barsback := rsiMode ? lookback : barsback
+
+if displayAll
+    displayDiag := true
+    display1618 := true
+    display1    := true
+    display886  := true
+    display786  := true
+    display618  := true
+    display50   := true
+    display382  := true
+    display236  := true
+    display0    := true
+if hideAll
+    display1618 := false
+    display1    := false
+    display886  := false
+    display786  := false
+    display618  := false
+    display50   := false
+    display382  := false
+    display236  := false
+    display0    := false
+    
+currPriceHigh = pivothigh(high, barsback, barsback)
+currPriceLow  = pivotlow(low,   barsback, barsback)
+currHigh = pivothigh(rsi, barsback, barsback)
+currLow  = pivotlow(rsi,  barsback, barsback)
+
+extension   = barssince(not na(currPriceHigh)) < barssince(not na(currPriceLow))
+retracement = barssince(not na(currPriceHigh)) > barssince(not na(currPriceLow))
+extensionRSI   = barssince(not na(currHigh)) < barssince(not na(currLow))
+retracementRSI = barssince(not na(currHigh)) > barssince(not na(currLow))
+
+var bool priceHighSet = na
+var bool priceLowSet  = na
+var bool rsiHighSet   = na
+var bool rsiLowSet    = na
+
+var int highIndex   = na
+var float highPrice = na
+var int lowIndex    = na
+var float lowPrice  = na
+
+lowRSIIndex  = 0
+lowRSI       = 0.0
+highRSIIndex = 0
+highRSI      = 0.0
+
+level1618Price = 1.618
+level886Price  = 0.886
+level786Price  = 0.786
+level618Price  = 0.618
+level50Price   = 0.5
+level382Price  = 0.382
+level236Price  = 0.236
+
+lastPriceLowIndex  = barssince(not na(priceLowSet))
+lastPriceHighIndex = barssince(not na(priceHighSet))
+lastRSILowIndex    = barssince(not na(rsiLowSet))
+lastRSIHighIndex   = barssince(not na(rsiHighSet))
+
+priceHighSet := not na(currPriceHigh) ? true : na
+priceLowSet  := not na(currPriceLow)  ? true : na
+rsiHighSet   := not na(currHigh)      ? true : na
+rsiLowSet    := not na(currLow)       ? true : na
+
+// Note locally scoped lines sometimes do not plot
+var line highLine = na
+var line lowLine  = na
+var line diagLine = na
+var line level1618Line= na
+var line level886Line = na
+var line level786Line = na
+var line level618Line = na
+var line level50Line  = na
+var line level382Line = na
+var line level236Line = na
+
+highColor = color.new(color.white, transp=0)
+lowColor  = color.new(color.white, transp=0)
+diagColor = color.new(color.white, transp=50)
+
+level1618Color= color.new(color.white, transp=0)
+level886Color = color.new(color.yellow, transp=0)
+level786Color = color.new(color.green, transp=25)
+level618Color = color.new(color.orange, transp=0)
+level50Color  = color.new(color.green, transp=0)
+level382Color = color.new(color.blue, transp=0)
+level236Color = color.new(color.red, transp=0)
+
+var highLineArray     = array.new_line()
+var lowLineArray      = array.new_line()
+var level1618LineArray= array.new_line()
+var level886LineArray = array.new_line()
+var level786LineArray = array.new_line()
+var level618LineArray = array.new_line()
+var level50LineArray  = array.new_line()
+var level382LineArray = array.new_line()
+var level236LineArray = array.new_line()
+
+calc_fib_level(_extension, _highPrice, _lowPrice, _level) =>
+    _extension ? _highPrice - ((_highPrice - _lowPrice) * _level) : _lowPrice + ((_highPrice - _lowPrice) * _level)
+
+set_coord_line(_line, _x1, _x2, _y1, _y2) =>
+    line.set_x1(_line, _x1)
+    line.set_x2(_line, _x2)
+    line.set_y1(_line, _y1)
+    line.set_y2(_line, _y2)
+    _line
+
+update_line(_line, _style, _width, _color, _extend) =>
+    line.set_style(_line, _style)
+    line.set_width(_line, _width)
+    line.set_color(_line, _color)
+    line.set_extend(_line, _extend)
+    _line
+
+if extension and not na(currPriceHigh) and not extension[1] and not rsiMode
+    highIndex := bar_index - barsback
+    highPrice := currPriceHigh
+    lowIndex  := bar_index - barsback - lastPriceLowIndex - 1
+    lowPrice  := low[lastPriceLowIndex + barsback + 1]
+
+    if display0
+        highLine := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, highPrice, highPrice)
+        highLine := update_line(highLine, line.style_solid,  2, highColor, extend.none)
+        if displayFibs
+            label.new(lowIndex + 1, highPrice, text = "0.000", style = label.style_none, textcolor = lowColor, size = size.normal)
+        array.push(highLineArray, highLine)
+    if display1
+        lowLine  := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, lowPrice, lowPrice)
+        lowLine  := update_line(lowLine,  line.style_solid,  2, lowColor,  extend.none)
+        if displayFibs
+            label.new(lowIndex + 1, lowPrice, text = "1.000", style = label.style_none, textcolor = highColor, size = size.normal)
+        array.push(lowLineArray, lowLine)
+    if display1618
+        level1618Price:= calc_fib_level(true, highPrice, lowPrice, level1618Price)
+        level1618Line := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, level1618Price, level1618Price)
+        level1618Line := update_line(level1618Line, line.style_solid, 2, level1618Color, extend.none)
+        if displayFibs
+            label.new(lowIndex + 1, level1618Price, text = "1.618", style = label.style_none, textcolor = level1618Color, size = size.normal)
+        array.push(level1618LineArray, level1618Line)
+    if display886
+        level886Price := calc_fib_level(true, highPrice, lowPrice, level886Price)
+        level886Line := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, level886Price, level886Price)
+        level886Line := update_line(level886Line, line.style_solid, 2, level886Color, extend.none)
+        if displayFibs
+            label.new(lowIndex + 1, level886Price, text = "0.886", style = label.style_none, textcolor = level886Color, size = size.normal)
+        array.push(level886LineArray, level886Line)
+    if display786
+        level786Price := calc_fib_level(true, highPrice, lowPrice, level786Price)
+        level786Line := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, level786Price, level786Price)
+        level786Line := update_line(level786Line, line.style_solid, 2, level786Color, extend.none)
+        if displayFibs
+            label.new(lowIndex + 1, level786Price, text = "0.786", style = label.style_none, textcolor = level786Color, size = size.normal)
+        array.push(level786LineArray, level786Line)
+    if display618
+        level618Price := calc_fib_level(true, highPrice, lowPrice, level618Price)
+        level618Line := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, level618Price, level618Price)
+        level618Line := update_line(level618Line, line.style_solid, 2, level618Color, extend.none)
+        if displayFibs
+            label.new(lowIndex + 1, level618Price, text = "0.618", style = label.style_none, textcolor = level618Color, size = size.normal)
+        array.push(level618LineArray, level618Line)
+    if display50
+        level50Price  := calc_fib_level(true, highPrice, lowPrice, level50Price)
+        level50Line   := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, level50Price,  level50Price)
+        level50Line   := update_line(level50Line, line.style_solid, 2, level50Color, extend.none)
+        if displayFibs
+            label.new(lowIndex + 1, level50Price, text = "0.500", style = label.style_none, textcolor = level50Color, size = size.normal)
+        array.push(level50LineArray, level50Line)
+    if display382
+        level382Price := calc_fib_level(true, highPrice, lowPrice, level382Price)
+        level382Line  := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, level382Price, level382Price)
+        level382Line  := update_line(level382Line, line.style_solid,  2, level382Color, extend.none)
+        if displayFibs
+            label.new(lowIndex + 1, level382Price, text = "0.382", style = label.style_none, textcolor = level382Color, size = size.normal)
+        array.push(level382LineArray, level382Line)
+    if display236
+        level236Price := calc_fib_level(true, highPrice, lowPrice, level236Price)
+        level236Line  := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, level236Price, level236Price)
+        level236Line  := update_line(level236Line, line.style_solid,  2, level236Color, extend.none)
+        if displayFibs
+            label.new(lowIndex + 1, level236Price, text = "0.236", style = label.style_none, textcolor = level236Color, size = size.normal)
+        array.push(level236LineArray, level236Line)
+    if displayDiag
+        diagLine := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, lowPrice, highPrice)
+        diagLine := update_line(diagLine, line.style_dashed, 2, diagColor, extend.none)
+
+if retracement and not na(currPriceLow) and not retracement[1] and not rsiMode
+    lowIndex  := bar_index - barsback
+    lowPrice  := currPriceLow
+    highIndex := bar_index - barsback - lastPriceHighIndex - 1
+    highPrice := high[lastPriceHighIndex + barsback + 1]
+    lineExtend = extend.none
+
+    if display1
+        highLine := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, highPrice, highPrice)
+        highLine := update_line(highLine, line.style_solid,  2, highColor, extend.none)
+        if displayFibs
+            label.new(highIndex + 1, highPrice, text = "1.000", style = label.style_none, textcolor = highColor, size = size.normal)
+        array.push(highLineArray, highLine)
+    if display0
+        lowLine  := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, lowPrice, lowPrice)
+        lowLine  := update_line(lowLine,  line.style_solid,  2, lowColor,  extend.none)
+        if displayFibs
+            label.new(highIndex + 1, lowPrice, text = "0.000", style = label.style_none, textcolor = lowColor, size = size.normal)
+        array.push(lowLineArray, lowLine)
+    if display1618
+        level1618Price:= calc_fib_level(false, highPrice, lowPrice, level1618Price)
+        level1618Line := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, level1618Price, level1618Price)
+        level1618Line := update_line(level1618Line, line.style_solid, 2, level1618Color, extend.none)
+        if displayFibs
+            label.new(highIndex + 1, level1618Price, text = "1.618", style = label.style_none, textcolor = level1618Color, size = size.normal)
+        array.push(level1618LineArray, level1618Line)
+    if display886
+        level886Price := calc_fib_level(false, highPrice, lowPrice, level886Price)
+        level886Line := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, level886Price, level886Price)
+        level886Line := update_line(level886Line, line.style_solid, 2, level886Color, extend.none)
+        if displayFibs
+            label.new(highIndex + 1, level886Price, text = "0.886", style = label.style_none, textcolor = level886Color, size = size.normal)
+        array.push(level886LineArray, level886Line)
+    if display786
+        level786Price := calc_fib_level(false, highPrice, lowPrice, level786Price)
+        level786Line := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, level786Price, level786Price)
+        level786Line := update_line(level786Line, line.style_solid, 2, level786Color, extend.none)
+        if displayFibs
+            label.new(highIndex + 1, level786Price, text = "0.786", style = label.style_none, textcolor = level786Color, size = size.normal)
+        array.push(level786LineArray, level786Line)
+    if display618
+        level618Price := calc_fib_level(false, highPrice, lowPrice, level618Price)
+        level618Line := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, level618Price, level618Price)
+        level618Line := update_line(level618Line, line.style_solid, 2, level618Color, extend.none)
+        if displayFibs
+            label.new(highIndex + 1, level618Price, text = "0.618", style = label.style_none, textcolor = level618Color, size = size.normal)
+        array.push(level618LineArray, level618Line)
+    if display50
+        level50Price  := calc_fib_level(false, highPrice, lowPrice, level50Price)
+        level50Line   := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, level50Price,  level50Price)
+        level50Line   := update_line(level50Line, line.style_solid, 2, level50Color, extend.none)
+        if displayFibs
+            label.new(highIndex + 1, level50Price, text = "0.500", style = label.style_none, textcolor = level50Color, size = size.normal)
+        array.push(level50LineArray, level50Line)
+    if display382
+        level382Price := calc_fib_level(false, highPrice, lowPrice, level382Price)
+        level382Line  := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, level382Price, level382Price)
+        level382Line  := update_line(level382Line, line.style_solid,  2, level382Color, extend.none)
+        if displayFibs
+            label.new(highIndex + 1, level382Price, text = "0.382", style = label.style_none, textcolor = level382Color, size = size.normal)
+        array.push(level382LineArray, level382Line)
+    if display236
+        level236Price := calc_fib_level(false, highPrice, lowPrice, level236Price)
+        level236Line  := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, level236Price, level236Price)
+        level236Line  := update_line(level236Line, line.style_solid,  2, level236Color, extend.none)
+        if displayFibs
+            label.new(highIndex + 1, level236Price, text = "0.236", style = label.style_none, textcolor = level236Color, size = size.normal)
+        array.push(level236LineArray, level236Line)
+    if displayDiag
+        diagLine := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, highPrice, lowPrice)
+        diagLine := update_line(diagLine, line.style_dashed, 2, diagColor, extend.none)
+
+if extensionRSI and not extensionRSI[1] and not na(currHigh) and rsiMode
+    lowIndex  := bar_index - barsback - lastRSILowIndex - 1
+    lowRSI    := rsi[barsback + lastRSILowIndex + 1]
+    highIndex := bar_index - barsback
+    highRSI   := rsi[barsback]
+
+    if display0
+        highLine := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, highRSI, highRSI)
+        highLine := update_line(highLine, line.style_solid,  2, highColor, extend.none)
+        if displayFibs
+            label.new(lowIndex + 1, highRSI, text = "0.000", style = label.style_none, textcolor = lowColor, size = size.normal)
+        array.push(highLineArray, highLine)
+    if display1
+        lowLine  := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, lowRSI, lowRSI)
+        lowLine  := update_line(lowLine,  line.style_solid,  2, lowColor,  extend.none)
+        if displayFibs
+            label.new(lowIndex + 1, lowRSI, text = "1.000", style = label.style_none, textcolor = highColor, size = size.normal)
+        array.push(lowLineArray, lowLine)
+    if display1618
+        level1618Price:= calc_fib_level(true, highRSI, lowRSI, level1618Price)
+        level1618Line := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, level1618Price, level1618Price)
+        level1618Line := update_line(level1618Line, line.style_solid, 2, level1618Color, extend.none)
+        if displayFibs
+            label.new(lowIndex + 1, level1618Price, text = "1.618", style = label.style_none, textcolor = level1618Color, size = size.normal)
+        array.push(level1618LineArray, level1618Line)
+    if display886
+        level886Price := calc_fib_level(true, highRSI, lowRSI, level886Price)
+        level886Line := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, level886Price, level886Price)
+        level886Line := update_line(level886Line, line.style_solid, 2, level886Color, extend.none)
+        if displayFibs
+            label.new(lowIndex + 1, level886Price, text = "0.886", style = label.style_none, textcolor = level886Color, size = size.normal)
+        array.push(level886LineArray, level886Line)
+    if display786
+        level786Price := calc_fib_level(true, highRSI, lowRSI, level786Price)
+        level786Line := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, level786Price, level786Price)
+        level786Line := update_line(level786Line, line.style_solid, 2, level786Color, extend.none)
+        if displayFibs
+            label.new(lowIndex + 1, level786Price, text = "0.786", style = label.style_none, textcolor = level786Color, size = size.normal)
+        array.push(level786LineArray, level786Line)
+    if display618
+        level618Price := calc_fib_level(true, highRSI, lowRSI, level618Price)
+        level618Line := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, level618Price, level618Price)
+        level618Line := update_line(level618Line, line.style_solid, 2, level618Color, extend.none)
+        if displayFibs
+            label.new(lowIndex + 1, level618Price, text = "0.618", style = label.style_none, textcolor = level618Color, size = size.normal)
+        array.push(level618LineArray, level618Line)
+    if display50
+        level50Price  := calc_fib_level(true, highRSI, lowRSI, level50Price)
+        level50Line   := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, level50Price, level50Price)
+        level50Line   := update_line(level50Line, line.style_solid, 2, level50Color, extend.none)
+        if displayFibs
+            label.new(lowIndex + 1, level50Price, text = "0.500", style = label.style_none, textcolor = level50Color, size = size.normal)
+        array.push(level50LineArray, level50Line)
+    if display382
+        level382Price := calc_fib_level(true, highRSI, lowRSI, level382Price)
+        level382Line  := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, level382Price, level382Price)
+        level382Line  := update_line(level382Line, line.style_solid,  2, level382Color, extend.none)
+        if displayFibs
+            label.new(lowIndex + 1, level382Price, text = "0.382", style = label.style_none, textcolor = level382Color, size = size.normal)
+        array.push(level382LineArray, level382Line)
+    if display236
+        level236Price := calc_fib_level(true, highRSI, lowRSI, level236Price)
+        level236Line  := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, level236Price, level236Price)
+        level236Line  := update_line(level236Line, line.style_solid,  2, level236Color, extend.none)
+        if displayFibs
+            label.new(lowIndex + 1, level236Price, text = "0.236", style = label.style_none, textcolor = level236Color, size = size.normal)
+        array.push(level236LineArray, level236Line)
+    if displayDiag
+        diagLine := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, lowRSI, highRSI)
+        diagLine := update_line(diagLine, line.style_dashed, 2, diagColor, extend.none)
+
+if retracementRSI and not retracementRSI[1] and not na(currLow) and rsiMode
+    lowIndex  := bar_index - barsback
+    lowRSI    := rsi[barsback]
+    highIndex := bar_index - barsback - lastRSIHighIndex - 1
+    highRSI   := rsi[barsback + lastRSIHighIndex + 1]
+
+    if display1
+        highLine := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, highRSI, highRSI)
+        highLine := update_line(highLine, line.style_solid,  2, highColor, extend.none)
+        if displayFibs
+            label.new(highIndex + 1, highRSI, text = "1.000", style = label.style_none, textcolor = highColor, size = size.normal)
+        array.push(highLineArray, highLine)
+    if display0
+        lowLine  := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, lowRSI, lowRSI)
+        lowLine  := update_line(lowLine,  line.style_solid,  2, lowColor,  extend.none)
+        if displayFibs
+            label.new(highIndex + 1, lowRSI, text = "0.000", style = label.style_none, textcolor = lowColor, size = size.normal)
+        array.push(lowLineArray, lowLine)
+    if display1618
+        level1618Price:= calc_fib_level(false, highRSI, lowRSI, level1618Price)
+        level1618Line := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, level1618Price, level1618Price)
+        level1618Line := update_line(level1618Line, line.style_solid, 2, level1618Color, extend.none)
+        if displayFibs
+            label.new(highIndex + 1, level1618Price, text = "1.618", style = label.style_none, textcolor = level1618Color, size = size.normal)
+        array.push(level1618LineArray, level1618Line)
+    if display886
+        level886Price := calc_fib_level(false, highRSI, lowRSI, level886Price)
+        level886Line := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, level886Price, level886Price)
+        level886Line := update_line(level886Line, line.style_solid, 2, level886Color, extend.none)
+        if displayFibs
+            label.new(highIndex + 1, level886Price, text = "0.886", style = label.style_none, textcolor = level886Color, size = size.normal)
+        array.push(level886LineArray, level886Line)
+    if display786
+        level786Price := calc_fib_level(false, highRSI, lowRSI, level786Price)
+        level786Line := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, level786Price, level786Price)
+        level786Line := update_line(level786Line, line.style_solid, 2, level786Color, extend.none)
+        if displayFibs
+            label.new(highIndex + 1, level786Price, text = "0.786", style = label.style_none, textcolor = level786Color, size = size.normal)
+        array.push(level786LineArray, level786Line)
+    if display618
+        level618Price := calc_fib_level(false, highRSI, lowRSI, level618Price)
+        level618Line := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, level618Price, level618Price)
+        level618Line := update_line(level618Line, line.style_solid, 2, level618Color, extend.none)
+        if displayFibs
+            label.new(highIndex + 1, level618Price, text = "0.618", style = label.style_none, textcolor = level618Color, size = size.normal)
+        array.push(level618LineArray, level618Line)
+    if display50
+        level50Price  := calc_fib_level(false, highRSI, lowRSI, level50Price)
+        level50Line   := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, level50Price,  level50Price)
+        level50Line   := update_line(level50Line, line.style_solid, 2, level50Color, extend.none)
+        if displayFibs
+            label.new(highIndex + 1, level50Price, text = "0.500", style = label.style_none, textcolor = level50Color, size = size.normal)
+        array.push(level50LineArray, level50Line)
+    if display382
+        level382Price := calc_fib_level(false, highRSI, lowRSI, level382Price)
+        level382Line  := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, level382Price, level382Price)
+        level382Line  := update_line(level382Line, line.style_solid,  2, level382Color, extend.none)
+        if displayFibs
+            label.new(highIndex + 1, level382Price, text = "0.382", style = label.style_none, textcolor = level382Color, size = size.normal)
+        array.push(level382LineArray, level382Line)
+    if display236
+        level236Price := calc_fib_level(false, highRSI, lowRSI, level236Price)
+        level236Line  := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, level236Price, level236Price)
+        level236Line  := update_line(level236Line, line.style_solid,  2, level236Color, extend.none)
+        if displayFibs
+            label.new(highIndex + 1, level236Price, text = "0.236", style = label.style_none, textcolor = level236Color, size = size.normal)
+        array.push(level236LineArray, level236Line)
+    if displayDiag
+        diagLine := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, highRSI, lowRSI)
+        diagLine := update_line(diagLine, line.style_dashed, 2, diagColor, extend.none)
+
+if barstate.isrealtime and numFibExt > 0
+    for i = 1 to numFibExt
+        if display0
+            highLine := array.pop(highLineArray)
+            line.set_extend(highLine, extend.right)
+        if display1
+            lowLine  := array.pop(lowLineArray)
+            line.set_extend(lowLine, extend.right)
+        if display1618
+            level1618Line := array.pop(level1618LineArray)
+            line.set_extend(level1618Line, extend.right)
+        if display886
+            level886Line := array.pop(level886LineArray)
+            line.set_extend(level886Line, extend.right)
+        if display786
+            level786Line := array.pop(level786LineArray)
+            line.set_extend(level786Line, extend.right)
+        if display618
+            level618Line := array.pop(level618LineArray)
+            line.set_extend(level618Line, extend.right)
+        if display50
+            level50Line   := array.pop(level50LineArray)
+            line.set_extend(level50Line, extend.right)
+        if display382
+            level382Line  := array.pop(level382LineArray)
+            line.set_extend(level382Line, extend.right)
+        if display236
+            level236Line  := array.pop(level236LineArray)
+            line.set_extend(level236Line, extend.right)

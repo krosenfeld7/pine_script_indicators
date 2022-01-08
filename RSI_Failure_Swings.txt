@@ -1,0 +1,211 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © krosenfeld7
+
+// This indicator is intended to be used on the Daily Timeframe
+
+//@version=4
+study("RSI Failure Swings", overlay = true)
+
+lookback          = input(title = "RSI Pivot Lookback",        type = input.integer, defval = 10,  minval = 1)
+rsiTolerance      = input(title = "RSI Epsilon (%)",           type = input.float,   defval = 1.0, minval = 0.0)
+lineExtensionStr  = input(title = "Level Extension",           type = input.string,  defval = "None", options = ["None", "Left", "Right", "Both"])
+lineWidth         = input(title = "Line Width",                type = input.integer, defval = 2, minval = 1)
+
+lineExtension = extend.none
+
+if lineExtensionStr == "Left"
+    lineExtension := extend.left
+else if lineExtensionStr == "Right"
+    lineExtension := extend.right
+else if lineExtensionStr == "Both"
+    lineExtension := extend.both
+
+len1     = input(14, minval = 1, title = "RSI Length")
+src1     = input(close, "RSI Source", type = input.source)
+rsiOver  = 70
+rsiMid   = 50
+rsiUnder = 30
+
+overlayMode       = input(title = "Overlay Price Chart",       type = input.bool, defval = true)
+displayDiag       = input(title = "High/Low Diag Line",        type = input.bool, defval = true)
+displaySupport    = input(title = "Display Support Levels",    type = input.bool, defval = true)
+displayResistance = input(title = "Display Resistance Levels", type = input.bool, defval = true)
+displayHighsLows  = input(title = "Display Highs/Lows",        type = input.bool, defval = true)
+displayFailSwing  = input(title = "Display Fail Swings Only",  type = input.bool, defval = true)
+
+up   = rma(max(change(src1), 0), len1)
+down = rma(-min(change(src1), 0), len1)
+rsi  = ((down == 0) ? 100 : ((up == 0) ? 0 : (100 - (100 / (1 + up / down)))))
+
+whiteLight = color.new(color.white,  transp = 100)
+whiteMed   = color.new(color.white,  transp = 90)
+whiteDark  = color.new(color.white,  transp = 80)
+
+plot(rsi, "RSI", color=not overlayMode ? color.orange : na, linewidth=2)
+
+band80 = hline(rsiOver + 10,  "Upper Band",  color = not overlayMode ? color.white : na, linewidth = 1, linestyle = hline.style_dashed)
+band50 = hline(rsiMid,        "Middle Band", color = not overlayMode ? color.blue  : na,  linewidth = 1,linestyle = hline.style_solid)
+band20 = hline(rsiUnder - 10, "Lower Band",  color = not overlayMode ? color.white : na, linewidth = 1, linestyle = hline.style_dashed)
+band70 = hline(rsiOver,       "Upper Band",  color = not overlayMode ? color.white : na, linewidth = 1, linestyle = hline.style_dashed)
+band30 = hline(rsiUnder,      "Lower Band",  color = not overlayMode ? color.white : na, linewidth = 1, linestyle = hline.style_dashed)
+fill(band50, band70, color = not overlayMode ? whiteLight : na, title = "Background")
+fill(band30, band50, color = not overlayMode ? whiteLight : na, title = "Background")
+fill(band70, band80, color = not overlayMode ? whiteMed   : na, title = "Background")
+fill(band20, band30, color = not overlayMode ? whiteMed   : na, title = "Background")
+
+fill(band80, hline(100, color = not overlayMode ? color.white : na, linestyle = hline.style_solid, linewidth = 2), color = not overlayMode ? whiteDark : na, title = "Background")
+fill(hline(0, color = not overlayMode ? color.white : na, linestyle = hline.style_solid, linewidth = 2), band20, color = not overlayMode ? whiteDark : na, title = "Background")
+
+var bool rsiHighSet   = na
+var bool rsiLowSet    = na
+
+lowRSIIndex  = 0
+lowRSI       = 0.0
+highRSIIndex = 0
+highRSI      = 0.0
+
+currHigh = pivothigh(rsi, lookback, lookback)
+currLow  = pivotlow(rsi,  lookback, lookback)
+
+extensionRSI   = barssince(not na(currHigh)) < barssince(not na(currLow))
+retracementRSI = barssince(not na(currHigh)) > barssince(not na(currLow))
+
+lastRSILowIndex  = barssince(not na(rsiLowSet))
+lastRSIHighIndex = barssince(not na(rsiHighSet))
+
+lastHighShort = valuewhen(not na(currHigh), currHigh, 1)
+lastLowShort  = valuewhen(not na(currLow),  currLow,  1)
+
+lowerHighShort  = not na(currHigh) ? lastHighShort > (currHigh * (1 + (rsiTolerance / 100))) : false
+higherHighShort = not na(currHigh) ? lastHighShort < (currHigh * (1 - (rsiTolerance / 100))) : false
+lowerLowShort   = not na(currLow)  ? lastLowShort  > (currLow *  (1 + (rsiTolerance / 100))) : false
+higherLowShort  = not na(currLow)  ? lastLowShort  < (currLow *  (1 - (rsiTolerance / 100))) : false
+
+rsiHighSet := not na(currHigh) ? true : na
+rsiLowSet  := not na(currLow)  ? true : na
+
+currHigh := na(currHigh) ? currHigh[1] : currHigh
+currLow  := na(currLow)  ? currLow[1]  : currLow
+
+higherLowMoreRecent  = barssince(lowerLowShort)   > barssince(higherLowShort)
+lowerLowMoreRecent   = barssince(higherLowShort)  > barssince(lowerLowShort)
+lowerHighMoreRecent  = barssince(higherHighShort) > barssince(lowerHighShort)
+higherHighMoreRecent = barssince(lowerHighShort)  > barssince(higherHighShort)
+
+var bool failureSwingTop    = na
+var bool failureSwingBottom = na
+
+indexFailureSwingTop    = barssince(failureSwingTop) > lookback
+indexFailureSwingBottom = barssince(failureSwingBottom) > lookback
+
+failureSwingTop    := lowerHighMoreRecent and rsi[lookback - 1] < currLow[lookback - 1] ? true : na
+failureSwingBottom := higherLowMoreRecent and rsi[lookback]     > currHigh[lookback]    ? true : na
+
+var line diagLine = na
+var line highLine = na
+var line lowLine  = na
+
+highColor = color.new(color.red, transp=0)
+lowColor  = color.new(color.green, transp=0)
+diagColor = color.new(color.white, transp=0)
+labelColor = color.new(color.black, transp=0)
+
+set_coord_line(_line, _x1, _x2, _y1, _y2) =>
+    line.set_x1(_line, _x1)
+    line.set_x2(_line, _x2)
+    line.set_y1(_line, _y1)
+    line.set_y2(_line, _y2)
+    _line
+
+update_line(_line, _style, _width, _color, _extend) =>
+    line.set_style(_line, _style)
+    line.set_width(_line, _width)
+    line.set_color(_line, _color)
+    line.set_extend(_line, _extend)
+    _line
+
+if failureSwingTop and indexFailureSwingTop
+    if not overlayMode
+        label.new(bar_index - lookback, rsi[lookback] - 4, style=label.style_label_up, color=labelColor, text = "Top Fail Swing", textcolor = color.red)
+        label.new(bar_index - lookback, rsi[lookback], style=label.style_circle, color=color.red, size=size.tiny)
+    else
+        label.new(bar_index - lookback, low[lookback] * 0.98, style=label.style_label_up, color=labelColor, text = "Top RSI Fail Swing", textcolor = color.red)
+        label.new(bar_index - lookback, close[lookback], style=label.style_circle, color=color.new(color.red, transp=50), size=size.tiny)
+        
+
+if failureSwingBottom and indexFailureSwingBottom
+    if not overlayMode
+        label.new(bar_index - lookback, rsi[lookback] + 4, style=label.style_label_down, color=labelColor, text = "Bottom Fail Swing", textcolor = color.green)
+        label.new(bar_index - lookback, rsi[lookback], style=label.style_circle, color=color.green, size=size.tiny)
+    else
+        label.new(bar_index - lookback, high[lookback] * 1.02, style=label.style_label_down, color=labelColor, text = "Bottom RSI Fail Swing", textcolor = color.green)
+        label.new(bar_index - lookback, close[lookback], style=label.style_circle, color=color.new(color.green, transp=50), size=size.tiny) 
+
+if (lowerHighShort or higherHighShort) and not failureSwingBottom and displayHighsLows and not displayFailSwing
+    if lowerHighShort
+        if not overlayMode
+            label.new(bar_index - lookback, currHigh + 10, style=label.style_triangledown, color=color.new(color.yellow, transp=50), size=size.tiny)
+        else
+            label.new(bar_index - lookback, high[lookback] * 1.02, style=label.style_triangledown, color=color.new(color.yellow, transp=50), size=size.tiny)
+    if higherHighShort
+        if not overlayMode
+            label.new(bar_index - lookback, currHigh + 10, style=label.style_triangledown, color=color.new(color.green, transp=50), size=size.tiny)
+        else
+            label.new(bar_index - lookback, high[lookback] * 1.02, style=label.style_triangledown, color=color.new(color.green, transp=50), size=size.tiny)
+
+if (lowerLowShort or higherLowShort) and not failureSwingTop and displayHighsLows and not displayFailSwing
+    if lowerLowShort
+        if not overlayMode
+            label.new(bar_index - lookback, currLow - 10, style=label.style_triangleup, color=color.new(color.red, transp=50), size=size.tiny)
+        else
+            label.new(bar_index - lookback, low[lookback] * 0.98, style=label.style_triangleup, color=color.new(color.red, transp=50), size=size.tiny)
+    if higherLowShort
+        if not overlayMode
+            label.new(bar_index - lookback, currLow - 10, style=label.style_triangleup, color=color.new(color.blue, transp=50), size=size.tiny)
+        else
+            label.new(bar_index - lookback, low[lookback] * 0.98, style=label.style_triangleup, color=color.new(color.blue, transp=50), size=size.tiny)
+
+if extensionRSI and not extensionRSI[1] and not na(currHigh) and not displayFailSwing
+    if not overlayMode
+        lowRSIIndex  := bar_index - lookback - lastRSILowIndex - 1
+        lowRSI       := rsi[lookback + lastRSILowIndex + 1]
+        highRSIIndex := bar_index - lookback
+        highRSI      := rsi[lookback]
+    else
+        lowRSIIndex  := bar_index - lookback - lastRSILowIndex - 1
+        lowRSI       := low[lookback + lastRSILowIndex + 1]
+        highRSIIndex := bar_index - lookback
+        highRSI      := high[lookback]
+    
+    if displayDiag
+        diagLine := set_coord_line(line.new(0,0,0,0), lowRSIIndex, highRSIIndex, lowRSI, highRSI)
+        diagLine := update_line(diagLine, line.style_dashed, 2, diagColor, extend.none)
+    if displayResistance
+        highLine := set_coord_line(line.new(0,0,0,0), lowRSIIndex, highRSIIndex, highRSI, highRSI)
+        highLine := update_line(highLine, line.style_solid, lineWidth, highColor, lineExtension)
+    if displaySupport
+        lowLine  := set_coord_line(line.new(0,0,0,0), lowRSIIndex, highRSIIndex, lowRSI, lowRSI)
+        lowLine  := update_line(lowLine, line.style_solid, lineWidth, lowColor, lineExtension)
+
+if retracementRSI and not retracementRSI[1] and not na(currLow) and not displayFailSwing
+    if not overlayMode
+        lowRSIIndex  := bar_index - lookback
+        lowRSI       := rsi[lookback]
+        highRSIIndex := bar_index - lookback - lastRSIHighIndex - 1
+        highRSI      := rsi[lookback + lastRSIHighIndex + 1]
+    else
+        lowRSIIndex  := bar_index - lookback
+        lowRSI       := low[lookback]
+        highRSIIndex := bar_index - lookback - lastRSIHighIndex - 1
+        highRSI      := high[lookback + lastRSIHighIndex + 1]
+    
+    if displayDiag
+        diagLine := set_coord_line(line.new(0,0,0,0), highRSIIndex, lowRSIIndex, highRSI, lowRSI)
+        diagLine := update_line(diagLine, line.style_dashed, 2, diagColor, extend.none)
+    if displayResistance
+        highLine := set_coord_line(line.new(0,0,0,0), highRSIIndex, lowRSIIndex, highRSI, highRSI)
+        highLine := update_line(highLine, line.style_solid, lineWidth, highColor, lineExtension)
+    if displaySupport
+        lowLine  := set_coord_line(line.new(0,0,0,0), highRSIIndex, lowRSIIndex, lowRSI, lowRSI)
+        lowLine  := update_line(lowLine, line.style_solid, lineWidth, lowColor, lineExtension)
+

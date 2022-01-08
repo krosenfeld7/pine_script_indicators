@@ -1,0 +1,186 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © krosenfeld7
+
+//@version=4
+study(title="Auto Support + Resistance Levels", shorttitle="Auto Support/Resistance Tool", overlay=true)
+
+barsback          = input(title = "Price Pivot Lookback", type = input.integer, defval = 6, minval = 1)
+lookback          = input(title = "RSI Pivot Lookback",   type = input.integer, defval = 15, minval = 1)
+lineExtensionStr  = input(title = "Level Extension",      type = input.string,  defval = "None", options = ["None", "Left", "Right", "Both"])
+lineWidth         = input(title = "Line Width",           type = input.integer, defval = 3, minval = 1)
+
+lineExtension = extend.none
+
+if lineExtensionStr == "Left"
+    lineExtension := extend.left
+else if lineExtensionStr == "Right"
+    lineExtension := extend.right
+else if lineExtensionStr == "Both"
+    lineExtension := extend.both
+
+len1 = input(14, minval = 1, title = "RSI Length")
+src1 = input(close, "RSI Source", type = input.source)
+
+rsiOver      = input(title = "RSI Highline",   type = input.integer, defval = 70, minval = 70, maxval = 90)
+rsiMid       = input(title = "RSI Midline",    type = input.integer, defval = 50, minval = 30, maxval = 70)
+rsiUnder     = input(title = "RSI Lowline",    type = input.integer, defval=  30, maxval = 30, minval = 10)
+rsiMode      = input(title = "RSI Mode",       type = input.bool,    defval = false)
+
+displayDiag       = input(title = "High/Low Diag Line",        type = input.bool, defval = true)
+displaySupport    = input(title = "Display Support Levels",    type = input.bool, defval = true)
+displayResistance = input(title = "Display Resistance Levels", type = input.bool, defval = true)
+
+barsback := rsiMode ? lookback : barsback
+
+up   = rma(max(change(src1), 0), len1)
+down = rma(-min(change(src1), 0), len1)
+rsi  = ((down == 0) ? 100 : ((up == 0) ? 0 : (100 - (100 / (1 + up / down)))))
+
+whiteLight    = color.new(color.white,  transp = 95)
+whiteMed      = color.new(color.white,  transp = 85)
+whiteDark     = color.new(color.white,  transp = 75)
+rsiModeWhite  = color.new(color.white,  transp = 0)
+rsiModeBlue   = color.new(color.blue,   transp = 0)
+rsiModeOrange = color.new(color.orange, transp = 0)
+
+plot(rsi, "RSI", color=rsiMode ? rsiModeOrange : na, linewidth=2)
+
+band80 = hline(rsiOver + 10,  "Upper Band",  color = rsiMode ? rsiModeWhite : na, linewidth = 1, linestyle = hline.style_dashed)
+band50 = hline(rsiMid,        "Middle Band", color = rsiMode ? rsiModeBlue  : na, linewidth = 1, linestyle = hline.style_solid)
+band20 = hline(rsiUnder - 10, "Lower Band",  color = rsiMode ? rsiModeWhite : na, linewidth = 1, linestyle = hline.style_dashed)
+band70 = hline(rsiOver,       "Upper Band",  color = rsiMode ? rsiModeWhite : na, linewidth = 1, linestyle = hline.style_dashed)
+band30 = hline(rsiUnder,      "Lower Band",  color = rsiMode ? rsiModeWhite : na, linewidth = 1, linestyle = hline.style_dashed)
+fill(band50, band70, color = rsiMode ? whiteLight : na, title = "Background")
+fill(band30, band50, color = rsiMode ? whiteLight : na, title = "Background")
+fill(band70, band80, color = rsiMode ? whiteMed : na,   title = "Background")
+fill(band20, band30, color = rsiMode ? whiteMed : na,   title = "Background")
+
+fill(band80, hline(100, color = rsiMode ? rsiModeWhite : na, linestyle = hline.style_solid, linewidth = 2), color = rsiMode ? whiteDark : na, title = "Background")
+fill(hline(0, color = rsiMode ? rsiModeWhite : na, linestyle = hline.style_solid, linewidth = 2), band20, color = rsiMode ? whiteDark : na, title = "Background")
+
+var bool priceHighSet = na
+var bool priceLowSet  = na
+var bool rsiHighSet   = na
+var bool rsiLowSet    = na
+
+highIndex = 0
+highPrice = 0.0
+lowIndex  = 0
+lowPrice  = 0.0
+
+lowRSIIndex  = 0
+lowRSI       = 0.0
+highRSIIndex = 0
+highRSI      = 0.0
+
+currPriceHigh = pivothigh(high, barsback, barsback)
+currPriceLow  = pivotlow(low,   barsback, barsback)
+
+extension   = barssince(not na(currPriceHigh)) < barssince(not na(currPriceLow))
+retracement = barssince(not na(currPriceHigh)) > barssince(not na(currPriceLow))
+
+lastPriceLowIndex  = barssince(not na(priceLowSet))
+lastPriceHighIndex = barssince(not na(priceHighSet))
+
+priceHighSet := not na(currPriceHigh) ? true : na
+priceLowSet  := not na(currPriceLow)  ? true : na
+
+currHigh = pivothigh(rsi, barsback, barsback)
+currLow  = pivotlow(rsi,  barsback, barsback)
+
+extensionRSI   = barssince(not na(currHigh)) < barssince(not na(currLow))
+retracementRSI = barssince(not na(currHigh)) > barssince(not na(currLow))
+
+lastRSILowIndex  = barssince(not na(rsiLowSet))
+lastRSIHighIndex = barssince(not na(rsiHighSet))
+
+rsiHighSet := not na(currHigh) ? true : na
+rsiLowSet  := not na(currLow)  ? true : na
+
+// Note locally scoped lines sometimes do not plot
+var line diagLine = na
+var line highLine = na
+var line lowLine  = na
+
+highColor = color.new(color.red,   transp=0)
+lowColor  = color.new(color.green, transp=0)
+diagColor = color.new(color.white, transp=0)
+
+set_coord_line(_line, _x1, _x2, _y1, _y2) =>
+    line.set_x1(_line, _x1)
+    line.set_x2(_line, _x2)
+    line.set_y1(_line, _y1)
+    line.set_y2(_line, _y2)
+    _line
+
+update_line(_line, _style, _width, _color, _extend) =>
+    line.set_style(_line, _style)
+    line.set_width(_line, _width)
+    line.set_color(_line, _color)
+    line.set_extend(_line, _extend)
+    _line
+
+if extension and not extension[1] and not rsiMode and not na(currPriceHigh)
+    highIndex := bar_index - barsback
+    highPrice := currPriceHigh
+    lowIndex  := bar_index - barsback - lastPriceLowIndex - 1
+    lowPrice  := low[lastPriceLowIndex + barsback + 1]
+    
+    if displayDiag
+        diagLine := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, lowPrice, highPrice)
+        diagLine := update_line(diagLine, line.style_dashed, 2, diagColor, extend.none)
+    if displayResistance
+        highLine := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, highPrice, highPrice)
+        highLine := update_line(highLine, line.style_solid, lineWidth, highColor, lineExtension)
+    if displaySupport
+        lowLine  := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, lowPrice, lowPrice)
+        lowLine  := update_line(lowLine, line.style_solid, lineWidth, lowColor, lineExtension)
+        
+if extensionRSI and not extensionRSI[1] and rsiMode and not na(currHigh)
+    lowIndex  := bar_index - barsback - lastRSILowIndex - 1
+    lowRSI    := rsi[barsback + lastRSILowIndex + 1]
+    highIndex := bar_index - barsback
+    highRSI   := rsi[barsback]
+    
+    if displayDiag
+        diagLine := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, lowRSI, highRSI)
+        diagLine := update_line(diagLine, line.style_dashed, 2, diagColor, extend.none)
+    if displayResistance
+        highLine := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, highRSI, highRSI)
+        highLine := update_line(highLine, line.style_solid, lineWidth, highColor, lineExtension)
+    if displaySupport
+        lowLine  := set_coord_line(line.new(0,0,0,0), lowIndex, highIndex, lowRSI, lowRSI)
+        lowLine  := update_line(lowLine, line.style_solid, lineWidth, lowColor, lineExtension)
+        
+if retracement and not retracement[1] and not rsiMode and not na(currPriceLow)
+    lowIndex  := bar_index - barsback
+    lowPrice  := currPriceLow
+    highIndex := bar_index - barsback - lastPriceHighIndex - 1
+    highPrice := high[lastPriceHighIndex + barsback + 1]
+    
+    if displayDiag
+        diagLine := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, highPrice, lowPrice)
+        diagLine := update_line(diagLine, line.style_dashed, 2, diagColor, extend.none)
+    if displayResistance
+        highLine := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, highPrice, highPrice)
+        highLine := update_line(highLine, line.style_solid, lineWidth, highColor, lineExtension)
+    if displaySupport
+        lowLine  := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, lowPrice, lowPrice)
+        lowLine  := update_line(lowLine, line.style_solid, lineWidth, lowColor, lineExtension)
+        
+if retracementRSI and not retracementRSI[1] and rsiMode and not na(currLow)
+    lowIndex  := bar_index - barsback
+    lowRSI    := rsi[barsback]
+    highIndex := bar_index - barsback - lastRSIHighIndex - 1
+    highRSI   := rsi[barsback + lastRSIHighIndex + 1]
+    
+    if displayDiag
+        diagLine := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, highRSI, lowRSI)
+        diagLine := update_line(diagLine, line.style_dashed, 2, diagColor, extend.none)
+    if displayResistance
+        highLine := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, highRSI, highRSI)
+        highLine := update_line(highLine, line.style_solid, lineWidth, highColor, lineExtension)
+    if displaySupport
+        lowLine  := set_coord_line(line.new(0,0,0,0), highIndex, lowIndex, lowRSI, lowRSI)
+        lowLine  := update_line(lowLine, line.style_solid, lineWidth, lowColor, lineExtension)
+
